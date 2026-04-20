@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Error Analyzer</title>
+    {% load static %}
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <link rel="stylesheet" href="{% static 'analyzer/css/style.css' %}?v=10">
+</head>
+<body
+    data-session-url="/api/session/"
+    data-login-url="/api/auth/login/"
+    data-signup-url="/api/auth/signup/"
+    data-logout-url="/api/auth/logout/"
+    data-dashboard-url="/api/dashboard/"
+    data-history-url="/api/history/"
+    data-history-clear-url="/api/history/clear/"
+    data-ws-path="/ws/execute/"
+    data-mentor-chat-url="/api/chat/mentor/"
+    data-ai-status-url="/api/ai/status/"
+>
+    <!-- AUTH SCREEN -->
+    <div id="auth-screen">
+        <div class="auth-wrap">
+            <div class="brand">
+                <div class="brand-icon">🧙</div>
+                <div>
+                    <div class="brand-name">Code<em>Sage</em></div>
+                    <div class="brand-tag">// v2.0 — AI Debugging Assistant</div>
+                </div>
+            </div>
+
+            <div class="auth-card">
+                <div class="auth-tabs">
+                    <div class="auth-tab on" id="tab-in" onclick="switchTab('in')">Sign In</div>
+                    <div class="auth-tab" id="tab-up" onclick="switchTab('up')">Sign Up</div>
+                </div>
+
+                <div id="f-in">
+                    <div class="field">
+                        <label>Email</label>
+                        <input id="li-email" type="email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')doLogin()">
+                    </div>
+                    <div class="field">
+                        <label>Password</label>
+                        <input id="li-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+                    </div>
+                    <button class="btn-auth" onclick="doLogin()">Sign In →</button>
+                    <div class="auth-demo">No account? <span onclick="quickDemo()">Try demo instantly</span></div>
+                </div>
+
+                <div id="f-up" style="display:none">
+                    <div class="field">
+                        <label>Name</label>
+                        <input id="su-name" type="text" placeholder="Your Name">
+                    </div>
+                    <div class="field">
+                        <label>Email</label>
+                        <input id="su-email" type="email" placeholder="you@example.com">
+                    </div>
+                    <div class="field">
+                        <label>Password</label>
+                        <input id="su-pass" type="password" placeholder="Min 6 characters" onkeydown="if(event.key==='Enter')doSignup()">
+                    </div>
+                    <button class="btn-auth" onclick="doSignup()">Create Account →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app">
+        <header>
+            <div class="h-brand">
+                <div class="h-icon">🧙</div>
+                <div class="h-name">Code<em>Sage</em></div>
+            </div>
+
+            <nav>
+                <button class="nav-btn" id="nb-dash" onclick="gv('dash')">📊 Dashboard</button>
+                <button class="nav-btn on" id="nb-edit" onclick="gv('edit')">⌨️ Editor</button>
+                <button class="nav-btn" id="nb-chat" onclick="gv('chat')">✨ Mentor Chat</button>
+                <button class="nav-btn" id="nb-hist" onclick="gv('hist')">📜 History</button>
+            </nav>
+
+            <div class="h-right">
+                <button id="key-btn" onclick="openSettings()">
+                    <span id="key-indicator">🔑</span>
+                    <span id="key-label">Chat Settings</span>
+                </button>
+
+                <div class="user-pill">
+                    <div class="user-av" id="uav">--</div>
+                    <span id="uname">User</span>
+                </div>
+
+                <button class="btn-out" onclick="doLogout()">Sign Out</button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD VIEW -->
+        <div class="view" id="v-dash">
+            <div class="dash-top">
+                <div>
+                    <div class="dash-title">Welcome to <em>CodeSage</em></div>
+                    <div class="dash-sub">// Your AI-powered debugging command center</div>
+                </div>
+                <button class="tbtn tbtn-run" onclick="gv('edit')" style="flex-shrink:0">▶ Open Editor</button>
+            </div>
+
+            <div class="stats">
+                <div class="sc b">
+                    <div class="sc-ico">⚡</div>
+                    <div class="sc-val" id="st-exec">0</div>
+                    <div class="sc-lbl">Executions</div>
+                </div>
+                <div class="sc r">
+                    <div class="sc-ico">🐛</div>
+                    <div class="sc-val" id="st-err">0</div>
+                    <div class="sc-lbl">Errors Found</div>
+                </div>
+                <div class="sc g">
+                    <div class="sc-ico">✅</div>
+                    <div class="sc-val" id="st-fix">0</div>
+                    <div class="sc-lbl">Auto-Fixes</div>
+                </div>
+                <div class="sc p">
+                    <div class="sc-ico">🌐</div>
+                    <div class="sc-val" id="st-lang">0</div>
+                    <div class="sc-lbl">Languages Used</div>
+                </div>
+            </div>
+
+            <div class="dash-mid">
+                <div class="dc">
+                    <div class="dc-title">Language Breakdown</div>
+                    <div class="lang-bars">
+                        <div class="lb-row">
+                            <div class="lb-lbl">Python</div>
+                            <div class="lb-track">
+                                <div class="lb-fill" id="bp" style="width:0%;background:linear-gradient(90deg,var(--violet),var(--violet2))"></div>
+                            </div>
+                            <div class="lb-pct" id="pp">0%</div>
+                        </div>
+                        <div class="lb-row">
+                            <div class="lb-lbl">Java</div>
+                            <div class="lb-track">
+                                <div class="lb-fill" id="bj" style="width:0%;background:linear-gradient(90deg,var(--orange),var(--amber))"></div>
+                            </div>
+                            <div class="lb-pct" id="pj">0%</div>
+                        </div>
+                        <div class="lb-row">
+                            <div class="lb-lbl">C</div>
+                            <div class="lb-track">
+                                <div class="lb-fill" id="bc" style="width:0%;background:linear-gradient(90deg,var(--fuchsia),var(--violet2))"></div>
+                            </div>
+                            <div class="lb-pct" id="pc">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dc">
+                    <div class="dc-title">Recent Activity</div>
+                    <div class="act-list" id="act-list">
+                        <div class="empty-ph"><span class="ep-ico">💻</span>No activity yet. Run some code!</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EDITOR VIEW -->
+        <div class="view on" id="v-edit">
+            <div class="toolbar">
+                <div class="lang-sel">
+                    <button class="lb on" data-l="python" onclick="setLang('python')">Python</button>
+                    <button class="lb" data-l="java" onclick="setLang('java')">Java</button>
+                    <button class="lb" data-l="c" onclick="setLang('c')">C</button>
+                </div>
+
+                <div class="sep"></div>
+
+                <button class="tbtn tbtn-run" id="run-btn" onclick="runCode()">▶ Run &amp; Analyze</button>
+                <button class="tbtn tbtn-stop" onclick="stopCode()">■ Stop</button>
+                <button class="tbtn tbtn-sec" onclick="clearAll()">⟳ Clear</button>
+
+                <label class="tbtn tbtn-blue" style="cursor:pointer">
+                    📎 Upload
+                    <input type="file" id="fu" accept=".py,.java,.c" style="display:none" onchange="uploadFile(event)">
+                </label>
+
+                <div class="sep"></div>
+
+                <button class="tbtn tbtn-ai" onclick="askAIAboutCode()">✨ Ask AI</button>
+                <button class="tbtn tbtn-blue" onclick="useVivaAnswer()">🎤 Viva Answer</button>
+                <button class="tbtn tbtn-sec" onclick="openReport()">📄 Report</button>
+
+                <div class="status-area">
+                    <div class="sdot s-idle" id="sdot"></div>
+                    <span class="stxt" id="stxt">Ready</span>
+                </div>
+            </div>
+
+            <div class="edit-body">
+                <div class="ep">
+                    <div class="ph">
+                        <div class="ph-title">
+                            <span id="lang-dot" style="width:7px;height:7px;border-radius:50%;background:var(--violet);display:inline-block"></span>
+                            <span id="fname">main.py</span>
+                        </div>
+                        <span class="ph-info" id="lc">0 lines</span>
+                    </div>
+                    <div id="mc"></div>
+                </div>
+
+                <div class="op">
+                    <div class="otabs">
+                        <div class="otab on" onclick="sotab('term')">⬛ Terminal</div>
+                        <div class="otab" onclick="sotab('anal')">🤖 Analysis</div>
+                        <div class="otab" onclick="sotab('mods')">📦 Modules</div>
+                        <div class="otab" onclick="sotab('cmp')">⇄ Compare</div>
+                    </div>
+
+                    <div class="oc on" id="oc-term">
+                        <div class="term">
+                            <div class="term-hd">
+                                <div class="tdot" style="background:#FF5F57"></div>
+                                <div class="tdot" style="background:#FFBD2E"></div>
+                                <div class="tdot" style="background:#28CA41"></div>
+                                <span class="term-title">CodeSage Terminal v2.0</span>
+                            </div>
+
+                            <div class="term-out" id="tout">
+                                <div class="tl tl-inf">// Welcome to CodeSage v2.0 — AI Debugging Assistant</div>
+                                <div class="tl tl-inf">// Run code and interact through the terminal input below</div>
+                                <div class="tl tl-inf">// Use Ctrl+Enter to run quickly</div>
+                                <div class="tl tl-inf">// Use Ctrl+K to stop execution</div>
+                            </div>
+
+                            <div class="term-in-row" id="tin-row">
+                                <span class="ti-prompt">▶</span>
+                                <input class="ti" id="ti" placeholder="Type program input and press Enter..." onkeydown="if(event.key==='Enter')sendInput()">
+                                <button class="ti-send" onclick="sendInput()">SEND</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="oc" id="oc-anal">
+                        <div class="empty-ph" id="anal-ph"><span class="ep-ico">🤖</span>Run your code to see AI analysis here.</div>
+                        <div id="anal-body" style="display:none"></div>
+                    </div>
+
+                    <div class="oc" id="oc-mods">
+                        <div class="empty-ph" id="mods-ph"><span class="ep-ico">📦</span>Module analysis appears after running code.</div>
+                        <div id="mods-body" style="display:none"></div>
+                    </div>
+
+                    <div class="oc" id="oc-cmp">
+                        <div class="empty-ph" id="cmp-ph"><span class="ep-ico">⇄</span>Original vs. suggested code comparison appears here.</div>
+                        <div id="cmp-body" style="display:none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI CHAT VIEW -->
+        <div class="view" id="v-chat">
+            <div class="chat-wrap">
+                <div class="chat-header">
+                    <div class="chat-title">✨ <em>Mentor Chat</em> — Ask about your code</div>
+                    <div class="chat-sub">// Built-in mentor style guidance based on your code and latest analysis</div>
+                </div>
+
+                <div class="chat-starters">
+                    <button class="starter-btn" onclick="chatStarter('Explain the latest error in simple words.')">Explain Error</button>
+                    <button class="starter-btn" onclick="chatStarter('Give me step-by-step debugging guidance for my current code.')">Debug Steps</button>
+                    <button class="starter-btn" onclick="chatStarter('Suggest optimizations for my current code.')">Optimize Code</button>
+                    <button class="starter-btn" onclick="chatStarter('Give me a viva-ready explanation for this program and error.')">Viva Mode</button>
+                </div>
+
+                <div class="chat-msgs" id="chat-msgs">
+                    <div class="chat-empty" id="chat-empty">
+                        <div class="chat-empty-ico">✨</div>
+                        <div class="chat-empty-title">Ask anything about your current code</div>
+                        <div class="chat-empty-sub">// Explain errors · Review code · Suggest fixes · Guide viva answers</div>
+                    </div>
+                </div>
+
+                <div class="chat-input-area">
+                    <div class="chat-input-box">
+                        <textarea id="chat-input" placeholder="Ask about your code, error, fix, logic, or improvements..." rows="1"
+                            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
+                            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+                        <button class="chat-send" id="chat-send-btn" onclick="sendChat()">↑</button>
+                    </div>
+                    <div class="chat-hint">Enter to send · Shift+Enter for new line</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HISTORY VIEW -->
+        <div class="view" id="v-hist">
+            <div class="hist-top">
+                <div>
+                    <div class="dash-title">Execution <em>History</em></div>
+                    <div class="dash-sub">// All past runs and analyses</div>
+                </div>
+                <button class="tbtn tbtn-sec" onclick="clearHistory()" style="padding:9px 16px">🗑 Clear All</button>
+            </div>
+
+            <div class="hist-card">
+                <table class="ht">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Language</th>
+                            <th>Code Preview</th>
+                            <th>Error Type</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="hist-body">
+                        <tr>
+                            <td colspan="6" class="empty-ph" style="padding:40px">No history yet. Run some code!</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div class="modal-bd" id="settings-modal">
+        <div class="modal-box">
+            <div class="modal-h">
+                <h2>⚙️ Chat Settings</h2>
+                <p>// Use Ollama on your machine via .env. This box only changes the mentor display name.</p>
+            </div>
+
+            <div class="field">
+                <label>Mentor Name</label>
+                <div class="sk-row">
+                    <input id="sk-input" type="password" placeholder="Code Mentor" onkeydown="if(event.key==='Enter')saveKey()">
+                    <button class="sk-eye" onclick="toggleKeyVis()">👁</button>
+                </div>
+            </div>
+
+            <div class="sk-status" id="sk-status"></div>
+
+            <div class="sk-btns">
+                <button class="sk-save" onclick="saveKey()">Save Name</button>
+                <button class="sk-remove" onclick="removeKey()">Remove</button>
+                <button class="sk-close" onclick="closeSettings()">Close</button>
+            </div>
+
+            <div class="sk-note">Backend AI needs Ollama running locally plus OLLAMA_BASE_URL and OLLAMA_MODEL in .env. This field is only stored in your browser for personalization.</div>
+        </div>
+    </div>
+
+    <!-- REPORT MODAL -->
+    <div class="modal-bd" id="report-modal">
+        <div class="modal-box report-modal-box">
+            <div class="r-title">📄 Debug Report</div>
+            <div class="r-ts" id="r-ts">—</div>
+
+            <div class="r-sec">
+                <div class="r-sec-title">Original Code</div>
+                <div class="r-code" id="r-orig">—</div>
+            </div>
+
+            <div class="r-sec">
+                <div class="r-sec-title">Error</div>
+                <div class="r-code" id="r-err" style="color:#FDA4AF">—</div>
+            </div>
+
+            <div class="r-sec">
+                <div class="r-sec-title">Explanation</div>
+                <div class="r-code" id="r-expl">—</div>
+            </div>
+
+            <div class="r-sec">
+                <div class="r-sec-title">Suggested Code</div>
+                <div class="r-code" id="r-fix" style="color:#6EE7B7">—</div>
+            </div>
+
+            <div class="r-sec">
+                <div class="r-sec-title">Output</div>
+                <div class="r-code" id="r-out">—</div>
+            </div>
+
+            <div class="r-btns">
+                <button class="r-btn rb-txt" onclick="dlReport('txt')">⬇ Download TXT</button>
+                <button class="r-btn rb-pdf" onclick="dlReport('pdf')">🖨 Download PDF</button>
+                <button class="r-btn rb-close" onclick="closeReport()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts"></div>
+
+    <script src="{% static 'analyzer/js/app.js' %}?v=10"></script>
+</body>
+</html>
